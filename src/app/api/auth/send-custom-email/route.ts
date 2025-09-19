@@ -14,9 +14,46 @@ export async function POST(request: NextRequest) {
 
     console.log("📧 Sending custom verification email to:", email);
 
-    // Create custom verification URL
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-    const verifyUrl = `${baseUrl}/auth/verify-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(callbackUrl || '/buyers')}`;
+    // Create custom verification URL with robust environment handling
+    let baseUrl = 'http://localhost:3000'; // fallback
+    
+    if (process.env.NEXTAUTH_URL) {
+      let nextAuthUrl = process.env.NEXTAUTH_URL.trim();
+      
+      // Handle malformed environment variable (sometimes it includes the variable name)
+      if (nextAuthUrl.startsWith('NEXTAUTH_URL=')) {
+        nextAuthUrl = nextAuthUrl.replace('NEXTAUTH_URL=', '');
+      }
+      
+      baseUrl = nextAuthUrl;
+      // Remove trailing slash if present
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.slice(0, -1);
+      }
+    } else if (process.env.VERCEL_URL) {
+      baseUrl = `https://${process.env.VERCEL_URL.trim()}`;
+    } else {
+      // Production fallback - use the known Vercel URL
+      if (process.env.NODE_ENV === 'production') {
+        baseUrl = 'https://e-sahayak-lead-management-system.vercel.app';
+      }
+    }
+    
+    console.log("🌍 Environment check:");
+    console.log("  NEXTAUTH_URL:", JSON.stringify(process.env.NEXTAUTH_URL));
+    console.log("  VERCEL_URL:", JSON.stringify(process.env.VERCEL_URL));
+    console.log("  NODE_ENV:", process.env.NODE_ENV);
+    console.log("  Base URL selected:", JSON.stringify(baseUrl));
+    
+    // Construct URL step by step to avoid any interpolation issues
+    const path = '/auth/verify-token';
+    const params = new URLSearchParams({
+      token: token,
+      email: email,
+      callbackUrl: callbackUrl || '/buyers'
+    });
+    
+    const verifyUrl = `${baseUrl}${path}?${params.toString()}`;
     
     console.log("✨ Custom verify URL:", verifyUrl);
 

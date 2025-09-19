@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth/config";
 import { db, authDb } from "../../../lib/db";
-import { buyers, buyerHistory, users } from "../../../lib/db/schema";
+import { buyers, buyerHistory, users, sessions } from "../../../lib/db/schema";
+import { CustomDrizzleAdapter } from "../../../lib/auth/custom-adapter";
 import {
   createBuyerSchema,
   buyerFiltersSchema,
@@ -14,6 +15,54 @@ import {
   buyerMutationRateLimiter,
   apiRateLimiter,
 } from "../../../lib/rate-limit";
+
+// Custom session validation function
+async function getCustomSession(request: NextRequest) {
+  try {
+    // First try NextAuth's getServerSession
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) {
+      console.log("✅ NextAuth session found:", session.user.email);
+      return session;
+    }
+
+    console.log("⚠️ NextAuth session not found, trying custom validation...");
+    
+    // Fallback: manually validate session cookie using our adapter
+    const sessionToken = request.cookies.get("next-auth.session-token")?.value;
+    if (!sessionToken) {
+      console.log("❌ No session cookie found");
+      return null;
+    }
+
+    console.log("🔍 Found session token:", sessionToken.substring(0, 20) + "...");
+
+    // Use our custom adapter to validate the session
+    const adapter = CustomDrizzleAdapter();
+    const sessionAndUser = await adapter.getSessionAndUser!(sessionToken);
+    
+    if (!sessionAndUser || sessionAndUser.session.expires < new Date()) {
+      console.log("❌ Session expired or invalid");
+      return null;
+    }
+
+    console.log("✅ Custom session validation successful:", sessionAndUser.user.email);
+    
+    // Return in NextAuth format
+    return {
+      user: {
+        id: sessionAndUser.user.id,
+        name: sessionAndUser.user.name,
+        email: sessionAndUser.user.email,
+        image: sessionAndUser.user.image,
+      },
+      expires: sessionAndUser.session.expires.toISOString(),
+    };
+  } catch (error) {
+    console.error("❌ Session validation error:", error);
+    return null;
+  }
+}
 
 // Helper function to ensure user exists with retry logic
 async function ensureUserExists(
@@ -75,14 +124,14 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse;
     }
 
-    const session = await getServerSession(authOptions);
+    const session = await getCustomSession(request);
 
     if (!session?.user?.id) {
-      console.log("No session or user ID found");
+      console.log("❌ No session or user ID found");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log("Session user ID:", session.user.id);
+    console.log("✅ Session user ID:", session.user.id);
 
     // Comprehensive user existence check and creation
     try {
@@ -186,7 +235,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getCustomSession(request);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
