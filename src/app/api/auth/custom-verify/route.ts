@@ -191,21 +191,33 @@ export async function GET(request: NextRequest) {
       callbackUrl,
     });
 
-    // Set NextAuth session cookie (different names for dev vs prod)
+    // Set NextAuth session cookie with production-compatible settings
     const cookieName = process.env.NODE_ENV === "production" 
       ? "__Secure-next-auth.session-token" 
       : "next-auth.session-token";
     
-    response.cookies.set(cookieName, sessionToken, {
+    const cookieOptions = {
       expires: sessionExpires,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       path: "/",
-    });
+    };
+
+    // In production, also set the non-secure version for compatibility
+    if (process.env.NODE_ENV === "production") {
+      response.cookies.set("next-auth.session-token", sessionToken, {
+        ...cookieOptions,
+        secure: false, // Also set non-secure version
+      });
+    }
+    
+    response.cookies.set(cookieName, sessionToken, cookieOptions);
     
     console.log("🍪 Session cookie set:", cookieName, "for user:", user.email);
     console.log("🔗 Callback URL:", callbackUrl);
+    console.log("🌍 Environment:", process.env.NODE_ENV);
+    console.log("🍪 Cookie options:", cookieOptions);
 
     console.log("✅ Custom authentication complete for:", user.email);
     return response;

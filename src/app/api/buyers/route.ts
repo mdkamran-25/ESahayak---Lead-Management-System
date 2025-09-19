@@ -29,7 +29,13 @@ async function getCustomSession(request: NextRequest) {
     console.log("⚠️ NextAuth session not found, trying custom validation...");
     
     // Fallback: manually validate session cookie using our adapter
-    const sessionToken = request.cookies.get("next-auth.session-token")?.value;
+    const sessionToken = request.cookies.get("next-auth.session-token")?.value || 
+                         request.cookies.get("__Secure-next-auth.session-token")?.value;
+    
+    console.log("🔍 Custom session - checking cookies:");
+    console.log("  - next-auth.session-token:", !!request.cookies.get("next-auth.session-token")?.value);
+    console.log("  - __Secure-next-auth.session-token:", !!request.cookies.get("__Secure-next-auth.session-token")?.value);
+    
     if (!sessionToken) {
       console.log("❌ No session cookie found");
       return null;

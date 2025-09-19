@@ -36,11 +36,16 @@ export default function VerifyToken() {
           setStatus("success");
           setMessage("Account verified successfully! Redirecting to app...");
           
+          console.log("🎉 Verification successful:", result);
+          console.log("🔗 Callback URL:", callbackUrl);
+          console.log("🍪 Cookies after verification:", document.cookie);
+          
           // Wait a moment for session to be fully processed, then redirect
           setTimeout(() => {
+            console.log("🔄 Redirecting to:", callbackUrl);
             // Force a page reload to ensure session is recognized
             window.location.replace(callbackUrl);
-          }, 2000);
+          }, 3000); // Increased timeout for production
         } else {
           throw new Error(result.error || "Verification failed");
         }

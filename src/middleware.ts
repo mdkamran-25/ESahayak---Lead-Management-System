@@ -18,8 +18,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get session token from cookie
-  const sessionToken = request.cookies.get("next-auth.session-token")?.value;
+  // Get session token from cookie (try both production and dev cookie names)
+  const sessionToken = request.cookies.get("next-auth.session-token")?.value || 
+                       request.cookies.get("__Secure-next-auth.session-token")?.value;
+  
+  console.log("🔍 Middleware: Checking cookies...");
+  console.log("  - next-auth.session-token:", !!request.cookies.get("next-auth.session-token")?.value);
+  console.log("  - __Secure-next-auth.session-token:", !!request.cookies.get("__Secure-next-auth.session-token")?.value);
+  console.log("  - Selected token:", sessionToken ? sessionToken.substring(0, 20) + "..." : "none");
   
   if (!sessionToken) {
     console.log("❌ Middleware: No session cookie found");
