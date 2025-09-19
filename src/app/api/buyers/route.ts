@@ -19,6 +19,9 @@ import {
 // Custom session validation function
 async function getCustomSession(request: NextRequest) {
   try {
+    console.log("🔍 Starting session validation...");
+    console.log("🌍 Environment:", process.env.NODE_ENV);
+    
     // First try NextAuth's getServerSession
     const session = await getServerSession(authOptions);
     if (session?.user?.id) {
@@ -28,6 +31,10 @@ async function getCustomSession(request: NextRequest) {
 
     console.log("⚠️ NextAuth session not found, trying custom validation...");
     
+    // Get all cookies for debugging
+    const allCookies = request.cookies.getAll();
+    console.log("🍪 All cookies:", allCookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`));
+    
     // Fallback: manually validate session cookie using our adapter
     const sessionToken = request.cookies.get("next-auth.session-token")?.value || 
                          request.cookies.get("__Secure-next-auth.session-token")?.value;
@@ -35,17 +42,24 @@ async function getCustomSession(request: NextRequest) {
     console.log("🔍 Custom session - checking cookies:");
     console.log("  - next-auth.session-token:", !!request.cookies.get("next-auth.session-token")?.value);
     console.log("  - __Secure-next-auth.session-token:", !!request.cookies.get("__Secure-next-auth.session-token")?.value);
+    console.log("  - Selected token:", sessionToken ? sessionToken.substring(0, 20) + "..." : "NONE");
     
     if (!sessionToken) {
-      console.log("❌ No session cookie found");
+      console.log("❌ No session cookie found - authentication failed");
       return null;
     }
 
-    console.log("🔍 Found session token:", sessionToken.substring(0, 20) + "...");
+    console.log("🔍 Found session token, validating with adapter...");
 
     // Use our custom adapter to validate the session
     const adapter = CustomDrizzleAdapter();
     const sessionAndUser = await adapter.getSessionAndUser!(sessionToken);
+    
+    console.log("🔍 Adapter result:", {
+      found: !!sessionAndUser,
+      expired: sessionAndUser ? sessionAndUser.session.expires < new Date() : "N/A",
+      user: sessionAndUser?.user?.email || "N/A"
+    });
     
     if (!sessionAndUser || sessionAndUser.session.expires < new Date()) {
       console.log("❌ Session expired or invalid");
