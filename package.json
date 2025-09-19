@@ -7,10 +7,14 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:setup": "node scripts/setup-db.js",
+    "db:check": "drizzle-kit check",
+    "db:drop": "drizzle-kit drop"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.10.0",
