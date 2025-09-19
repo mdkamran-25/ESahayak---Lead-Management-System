@@ -57,12 +57,12 @@ export const statusEnum = pgEnum("status", [
   "Dropped",
 ]);
 
-// Users table for NextAuth (matching actual database)
-export const users = pgTable("users", {
+// Users table for NextAuth (matching actual database - singular names)
+export const users = pgTable("user", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  emailVerified: timestamp("email_verified"), // snake_case to match DB
+  emailVerified: timestamp("emailVerified"), // camelCase to match latest migration
   image: varchar("image", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -71,8 +71,8 @@ export const users = pgTable("users", {
 // Alias for NextAuth adapter compatibility
 export const user = users;
 
-// Accounts table for NextAuth (matching actual database)
-export const accounts = pgTable("accounts", {
+// Accounts table for NextAuth (matching actual database - singular names)
+export const accounts = pgTable("account", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
     .references(() => users.id, { onDelete: "cascade" })
@@ -89,8 +89,8 @@ export const accounts = pgTable("accounts", {
   session_state: varchar("session_state", { length: 255 }),
 });
 
-// Sessions table for NextAuth (matching actual database)
-export const sessions = pgTable("sessions", {
+// Sessions table for NextAuth (matching actual database - singular names)
+export const sessions = pgTable("session", {
   id: uuid("id").defaultRandom().primaryKey(),
   sessionToken: varchar("session_token", { length: 255 }).notNull().unique(),
   userId: uuid("user_id")
@@ -99,8 +99,8 @@ export const sessions = pgTable("sessions", {
   expires: timestamp("expires").notNull(),
 });
 
-// Verification tokens table for NextAuth (matching actual database)
-export const verificationTokens = pgTable("verification_tokens", {
+// Verification tokens table for NextAuth (matching actual database - singular names)
+export const verificationTokens = pgTable("verification_token", {
   identifier: varchar("identifier", { length: 255 }).notNull(),
   token: varchar("token", { length: 255 }).notNull().unique(),
   expires: timestamp("expires").notNull(),

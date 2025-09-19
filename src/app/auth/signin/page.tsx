@@ -1,6 +1,5 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -23,17 +22,40 @@ function SignInContent() {
       // Validate email
       const validatedData = authSchema.parse({ email });
 
-      const result = await signIn("email", {
-        email: validatedData.email,
-        callbackUrl,
-        redirect: false,
+      // Create custom verification token
+      const tokenResponse = await fetch("/api/auth/custom-verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: validatedData.email }),
       });
 
-      if (result?.error) {
-        setError("Failed to send magic link. Please try again.");
-      } else {
-        router.push("/auth/verify?email=" + encodeURIComponent(email));
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to create verification token");
       }
+
+      const tokenResult = await tokenResponse.json();
+
+      // Send custom verification email
+      const emailResponse = await fetch("/api/auth/send-custom-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: validatedData.email,
+          name: null, // No name for signin
+          token: tokenResult.token,
+          callbackUrl,
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        throw new Error("Failed to send verification email");
+      }
+
+      router.push("/auth/verify?email=" + encodeURIComponent(email));
     } catch (err: any) {
       if (err.errors) {
         setError(err.errors[0].message);

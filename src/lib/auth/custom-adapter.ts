@@ -13,19 +13,18 @@ import { v4 as uuidv4 } from "uuid";
 export function CustomDrizzleAdapter(): Adapter {
   return {
     async createUser(user: Omit<AdapterUser, "id">): Promise<AdapterUser> {
-      const newUser = {
-        id: uuidv4(),
+      console.log("🔧 NextAuth trying to create user:", user.email);
+      console.log("🚫 Skipping NextAuth user creation - handled by custom API");
+      
+      // Don't create user here - let our custom API handle it
+      // Return a dummy user to satisfy NextAuth interface
+      return {
+        id: "pending",
         name: user.name || null,
         email: user.email,
         emailVerified: user.emailVerified || null,
         image: user.image || null,
       };
-
-      const [createdUser] = await authDb
-        .insert(users)
-        .values(newUser)
-        .returning();
-      return createdUser;
     },
 
     async getUser(id) {
@@ -122,6 +121,8 @@ export function CustomDrizzleAdapter(): Adapter {
     },
 
     async getSessionAndUser(sessionToken) {
+      console.log("🔍 Adapter: Looking for session token:", sessionToken?.substring(0, 20) + "...");
+      
       const [sessionAndUser] = await authDb
         .select({
           session: sessions,
@@ -132,6 +133,7 @@ export function CustomDrizzleAdapter(): Adapter {
         .where(eq(sessions.sessionToken, sessionToken))
         .limit(1);
 
+      console.log("🔍 Adapter: Found session?", !!sessionAndUser, sessionAndUser?.user?.email || "none");
       return sessionAndUser || null;
     },
 
@@ -152,32 +154,31 @@ export function CustomDrizzleAdapter(): Adapter {
     },
 
     async createVerificationToken({ identifier, expires, token }) {
+      console.log("🎫 Creating verification token for:", identifier);
+      
       const verificationToken = {
         identifier,
         token,
         expires,
       };
 
-      await authDb.insert(verificationTokens).values(verificationToken);
-      return verificationToken;
+      try {
+        await authDb.insert(verificationTokens).values(verificationToken);
+        console.log("✅ Verification token created");
+        return verificationToken;
+      } catch (error) {
+        console.error("❌ Failed to create verification token:", error);
+        throw error;
+      }
     },
 
     async useVerificationToken({ identifier, token }) {
-      try {
-        const [verificationToken] = await authDb
-          .delete(verificationTokens)
-          .where(
-            and(
-              eq(verificationTokens.identifier, identifier),
-              eq(verificationTokens.token, token)
-            )
-          )
-          .returning();
-
-        return verificationToken || null;
-      } catch (err) {
-        throw new Error("Failed to use verification token");
-      }
+      console.log("🔍 NextAuth trying to use verification token for:", identifier);
+      console.log("🚫 Skipping NextAuth token consumption - handled by custom API");
+      
+      // Don't consume the token here - let our custom API handle it
+      // Just return null so NextAuth doesn't create a user automatically
+      return null;
     },
   };
 }

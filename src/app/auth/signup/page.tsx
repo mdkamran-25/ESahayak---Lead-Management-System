@@ -33,6 +33,7 @@ function SignUpContent() {
       // Validate form data
       const validatedData = signupSchema.parse(formData);
 
+      // First, check if user already exists via our signup endpoint
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: {
@@ -45,6 +46,42 @@ function SignUpContent() {
 
       if (!response.ok) {
         throw new Error(result.message || "Failed to create account");
+      }
+
+      // Create custom verification token with user name
+      const tokenResponse = await fetch("/api/auth/custom-verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          email: validatedData.email,
+          name: validatedData.name 
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to create verification token");
+      }
+
+      const tokenResult = await tokenResponse.json();
+
+      // Send custom verification email
+      const emailResponse = await fetch("/api/auth/send-custom-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: validatedData.email,
+          name: validatedData.name,
+          token: tokenResult.token,
+          callbackUrl,
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        throw new Error("Failed to send verification email");
       }
 
       // Redirect to verify page with success message
