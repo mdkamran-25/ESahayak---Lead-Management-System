@@ -109,23 +109,53 @@ async function ensureUserExists(
       return;
     }
 
-    console.log("User not found, creating user...");
+    console.log("❌ User not found in database! This indicates a session/database mismatch.");
+    console.log("Session User ID:", userId);
+    console.log("Session Email:", email);
+    
+    // Check if user exists by email (different ID)
+    if (email) {
+      console.log("🔍 Searching for user by email...");
+      const userByEmail = await authDb
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+        
+      if (userByEmail.length > 0) {
+        console.log("🔍 Found user by email with ID:", userByEmail[0].id);
+        console.log("❌ Session user ID doesn't match database user ID!");
+        throw new Error(`Session user ID mismatch. Session: ${userId}, Database: ${userByEmail[0].id}`);
+      }
+    }
+
+    console.log("User not found by email either, creating user...");
     try {
       await authDb.insert(users).values({
         id: userId,
         email: email || "",
         name: name || null,
         image: image || null,
+        emailVerified: new Date(), // Add email verification
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
-      console.log("User created successfully");
+      console.log("✅ User created successfully");
       return;
     } catch (userCreateError: any) {
       console.error(
-        `User creation attempt ${attempts} failed:`,
+        `❌ User creation attempt ${attempts} failed:`,
         userCreateError
       );
+      
+      // Check if it's a unique constraint violation (user already exists)
+      if (userCreateError.message?.includes('duplicate key') || userCreateError.message?.includes('unique constraint')) {
+        console.log("✅ User already exists (race condition), continuing...");
+        return;
+      }
+      
       if (attempts >= maxAttempts) {
-        throw new Error("Failed to create user after multiple attempts");
+        throw new Error("Failed to create user after multiple attempts: " + userCreateError.message);
       }
       // Wait before retrying
       await new Promise((resolve) => setTimeout(resolve, 100 * attempts));
@@ -152,22 +182,56 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("✅ Session user ID:", session.user.id);
+    console.log("✅ Session user email:", session.user.email);
 
-    // Comprehensive user existence check and creation
-    try {
-      await ensureUserExists(
-        session.user.id,
-        session.user.email,
-        session.user.name,
-        session.user.image
-      );
-    } catch (userError: any) {
-      console.error("Failed to ensure user exists:", userError);
-      return NextResponse.json(
-        { error: "Failed to initialize user account" },
-        { status: 500 }
-      );
+    // FORCE RECOMPILATION - Find the actual user in database and resolve any ID mismatches
+    let actualUserId = session.user.id;
+    
+    // Check if session user ID exists in database
+    let [userInDb] = await authDb
+      .select()
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+
+    if (!userInDb && session.user.email) {
+      console.log("🔍 Session user ID not found, searching by email...");
+      // If not found by ID, try to find by email (potential ID mismatch)
+      [userInDb] = await authDb
+        .select()
+        .from(users)
+        .where(eq(users.email, session.user.email))
+        .limit(1);
+        
+      if (userInDb) {
+        console.log("✅ Found user by email with different ID:", userInDb.id);
+        actualUserId = userInDb.id; // Use the actual database user ID
+      }
     }
+
+    if (!userInDb) {
+      console.log("❌ User not found in database, creating user...");
+      // Create user if doesn't exist
+      try {
+        await ensureUserExists(
+          session.user.id,
+          session.user.email,
+          session.user.name,
+          session.user.image
+        );
+        actualUserId = session.user.id;
+      } catch (userError: any) {
+        console.error("Failed to ensure user exists:", userError);
+        return NextResponse.json(
+          { error: "Failed to initialize user account: " + userError.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    console.log("✅ Using user ID for buyer creation:", actualUserId);
+
+    // User existence already checked above
 
     const body = await request.json();
     const validatedData = createBuyerSchema.parse(body);
@@ -177,37 +241,48 @@ export async function POST(request: NextRequest) {
       ...validatedData,
       email: validatedData.email === "" ? null : validatedData.email,
       notes: validatedData.notes === "" ? null : validatedData.notes,
-      ownerId: session.user.id,
+      ownerId: actualUserId, // Use the resolved actual user ID
     };
 
-    // Double-check user exists just before creating buyer
-    console.log("Double-checking user exists before buyer creation...");
-    const userCheck = await db
+    // Ensure user exists in main database (sync from auth db if needed)
+    console.log("🔧 Ensuring user exists in main database...");
+    
+    // Check if user exists in main database using the resolved actualUserId
+    const [mainUser] = await db
       .select()
       .from(users)
-      .where(eq(users.id, session.user.id))
+      .where(eq(users.id, actualUserId))
       .limit(1);
 
-    if (userCheck.length === 0) {
-      console.log("User not found in main db, creating in main db as well...");
+    if (!mainUser && userInDb) {
+      console.log("🔧 User not found in main db, syncing from auth db...");
       try {
         await db.insert(users).values({
-          id: session.user.id,
-          email: session.user.email || "",
-          name: session.user.name || null,
-          image: session.user.image || null,
+          id: userInDb.id,
+          email: userInDb.email,
+          name: userInDb.name,
+          image: userInDb.image,
+          emailVerified: userInDb.emailVerified,
+          createdAt: userInDb.createdAt,
+          updatedAt: userInDb.updatedAt,
         });
-        console.log("User created in main db successfully");
+        console.log("✅ User synced to main db successfully");
       } catch (mainDbError: any) {
-        console.error("Failed to create user in main db:", mainDbError);
-        return NextResponse.json(
-          { error: "Failed to initialize user account" },
-          { status: 500 }
-        );
+        console.error("❌ Failed to sync user to main db:", mainDbError);
+        
+        // Check if it's a duplicate key error (race condition)
+        if (mainDbError.message?.includes('duplicate key') || mainDbError.message?.includes('unique constraint')) {
+          console.log("✅ User already exists in main db (race condition)");
+        } else {
+          return NextResponse.json(
+            { error: "Failed to sync user account: " + mainDbError.message },
+            { status: 500 }
+          );
+        }
       }
     }
 
-    console.log("User confirmed to exist, proceeding with buyer creation...");
+    console.log("✅ User confirmed to exist in main db, proceeding with buyer creation...");
     const [newBuyer] = await db.insert(buyers).values(buyerData).returning();
 
     // Create history entry

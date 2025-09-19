@@ -91,6 +91,22 @@ function SignOutContent() {
         }
       }
 
+      // Call our custom logout API to clean up database sessions and cookies
+      try {
+        const response = await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+        
+        if (response.ok) {
+          console.log("✅ Custom logout successful");
+        } else {
+          console.warn("⚠️ Custom logout failed:", await response.text());
+        }
+      } catch (error) {
+        console.warn("⚠️ Custom logout error:", error);
+      }
+
       // Sign out with NextAuth
       await signOut({
         callbackUrl: callbackUrl,
