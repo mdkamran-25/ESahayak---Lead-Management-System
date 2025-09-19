@@ -4,14 +4,15 @@ import { authOptions } from "../../../../lib/auth/config";
 import { db } from "../../../../lib/db";
 import { buyers, buyerHistory } from "../../../../lib/db/schema";
 import { updateBuyerSchema } from "../../../../lib/validations/buyer";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -59,9 +60,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -183,9 +185,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
