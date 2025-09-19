@@ -32,7 +32,13 @@ Add these environment variables in your Vercel dashboard:
 ```env
 DATABASE_URL=your_supabase_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret_key
-NEXTAUTH_URL=https://your-domain.vercel.app
+
+# Domain Configuration (choose one):
+# Option 1: Custom Domain (Recommended)
+NEXTAUTH_URL=https://yourdomain.com
+
+# Option 2: Let NextAuth auto-detect (for Vercel domains)
+# Leave NEXTAUTH_URL empty or omit it entirely
 
 # Email Configuration (for magic links)
 EMAIL_SERVER_HOST=smtp.gmail.com
@@ -42,16 +48,27 @@ EMAIL_SERVER_PASSWORD=your_app_password
 EMAIL_FROM=noreply@yourdomain.com
 ```
 
-### 4. Domain Configuration
+⚠️ **Important: Vercel Domain Issue**
 
-1. **Custom Domain** (optional):
+Vercel generates **new domains for each deployment** (e.g., `your-app-abc123.vercel.app`, then `your-app-def456.vercel.app`). This breaks NextAuth because the callback URLs change.
 
-   - Go to Vercel dashboard → Project → Settings → Domains
-   - Add your custom domain
+### 4. Domain Configuration Solutions
 
-2. **NEXTAUTH_URL Update**:
-   - Update `NEXTAUTH_URL` to your actual domain
-   - Format: `https://yourdomain.com` or `https://your-app.vercel.app`
+**Option 1: Custom Domain (Recommended ✅)**
+1. Buy a domain (e.g., `esahayak.com`)
+2. Go to Vercel dashboard → Project → Settings → Domains
+3. Add your custom domain
+4. Set `NEXTAUTH_URL=https://esahayak.com` in environment variables
+
+**Option 2: Automatic URL Detection (Alternative)**
+1. Leave `NEXTAUTH_URL` empty in Vercel environment variables
+2. NextAuth will automatically detect the current domain
+3. This works with changing Vercel domains
+
+**Option 3: Use Vercel's Production Domain**
+1. Get your stable production URL from Vercel dashboard
+2. Look for the domain WITHOUT random suffixes (usually your project name)
+3. Set `NEXTAUTH_URL` to that stable domain
 
 ### 5. Database Configuration
 

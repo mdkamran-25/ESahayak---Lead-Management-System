@@ -29,7 +29,6 @@ export const authOptions: NextAuthOptions = {
       },
       from: process.env.EMAIL_FROM!,
       sendVerificationRequest: async ({ identifier, url, provider }) => {
-        const { host } = new URL(url);
         const transport = nodemailer.createTransport(provider.server);
 
         const result = await transport.sendMail({
@@ -70,6 +69,8 @@ ${url}
   session: {
     strategy: "database",
   },
+  // Handle dynamic Vercel URLs automatically
+  useSecureCookies: process.env.NODE_ENV === "production",
   pages: {
     signIn: "/auth/signin",
     signOut: "/auth/signout",
