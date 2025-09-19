@@ -1,0 +1,42 @@
+# Files and directories to ignore during Vercel deployment
+
+# Development files
+.env.local
+.env
+
+# Documentation (keep deployment guide)
+README.md
+AUTHENTICATION_SYSTEM.md
+PRODUCTION_SETUP_GUIDE.md
+
+# Database dev tools
+drizzle.config.ts
+
+# Git
+.git/
+.gitignore
+
+# Dependencies
+node_modules/
+
+# Build artifacts that will be rebuilt
+.next/
+.swc/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage reports
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
