@@ -22,14 +22,9 @@ async function getCustomSession(request: NextRequest) {
     console.log("🔍 Starting session validation...");
     console.log("🌍 Environment:", process.env.NODE_ENV);
     
-    // First try NextAuth's getServerSession
-    const session = await getServerSession(authOptions);
-    if (session?.user?.id) {
-      console.log("✅ NextAuth session found:", session.user.email);
-      return session;
-    }
-
-    console.log("⚠️ NextAuth session not found, trying custom validation...");
+    // Skip NextAuth getServerSession in API routes as it doesn't work reliably
+    // Go directly to custom validation
+    console.log("🔍 Using custom session validation for API route...");
     
     // Get all cookies for debugging
     const allCookies = request.cookies.getAll();
@@ -55,14 +50,25 @@ async function getCustomSession(request: NextRequest) {
     const adapter = CustomDrizzleAdapter();
     const sessionAndUser = await adapter.getSessionAndUser!(sessionToken);
     
+    const now = new Date();
     console.log("🔍 Adapter result:", {
       found: !!sessionAndUser,
-      expired: sessionAndUser ? sessionAndUser.session.expires < new Date() : "N/A",
-      user: sessionAndUser?.user?.email || "N/A"
+      expired: sessionAndUser ? sessionAndUser.session.expires < now : "N/A",
+      expiresAt: sessionAndUser?.session.expires?.toISOString() || "N/A",
+      currentTime: now.toISOString(),
+      user: sessionAndUser?.user?.email || "N/A",
+      userId: sessionAndUser?.user?.id || "N/A"
     });
     
-    if (!sessionAndUser || sessionAndUser.session.expires < new Date()) {
-      console.log("❌ Session expired or invalid");
+    if (!sessionAndUser) {
+      console.log("❌ Session not found in database");
+      return null;
+    }
+    
+    if (sessionAndUser.session.expires < now) {
+      console.log("❌ Session expired");
+      console.log("  - Session expires:", sessionAndUser.session.expires.toISOString());
+      console.log("  - Current time:", now.toISOString());
       return null;
     }
 
@@ -178,11 +184,13 @@ export async function POST(request: NextRequest) {
 
     if (!session?.user?.id) {
       console.log("❌ No session or user ID found");
+      console.log("❌ Session object:", session);
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     console.log("✅ Session user ID:", session.user.id);
     console.log("✅ Session user email:", session.user.email);
+    console.log("✅ Full session object:", JSON.stringify(session, null, 2));
 
     // FORCE RECOMPILATION - Find the actual user in database and resolve any ID mismatches
     let actualUserId = session.user.id;
@@ -231,19 +239,6 @@ export async function POST(request: NextRequest) {
 
     console.log("✅ Using user ID for buyer creation:", actualUserId);
 
-    // User existence already checked above
-
-    const body = await request.json();
-    const validatedData = createBuyerSchema.parse(body);
-
-    // Transform empty strings to undefined for optional fields
-    const buyerData = {
-      ...validatedData,
-      email: validatedData.email === "" ? null : validatedData.email,
-      notes: validatedData.notes === "" ? null : validatedData.notes,
-      ownerId: actualUserId, // Use the resolved actual user ID
-    };
-
     // Ensure user exists in main database (sync from auth db if needed)
     console.log("🔧 Ensuring user exists in main database...");
     
@@ -254,17 +249,37 @@ export async function POST(request: NextRequest) {
       .where(eq(users.id, actualUserId))
       .limit(1);
 
-    if (!mainUser && userInDb) {
+    if (!mainUser) {
       console.log("🔧 User not found in main db, syncing from auth db...");
+      
+      // Get the user from auth db to sync
+      let userToSync = userInDb;
+      if (!userToSync) {
+        console.log("🔍 Getting user from auth db for sync...");
+        [userToSync] = await authDb
+          .select()
+          .from(users)
+          .where(eq(users.id, actualUserId))
+          .limit(1);
+      }
+      
+      if (!userToSync) {
+        console.error("❌ User not found in auth db either - this should not happen");
+        return NextResponse.json(
+          { error: "User account not found - please sign in again" },
+          { status: 401 }
+        );
+      }
+      
       try {
         await db.insert(users).values({
-          id: userInDb.id,
-          email: userInDb.email,
-          name: userInDb.name,
-          image: userInDb.image,
-          emailVerified: userInDb.emailVerified,
-          createdAt: userInDb.createdAt,
-          updatedAt: userInDb.updatedAt,
+          id: userToSync.id,
+          email: userToSync.email,
+          name: userToSync.name,
+          image: userToSync.image,
+          emailVerified: userToSync.emailVerified,
+          createdAt: userToSync.createdAt,
+          updatedAt: userToSync.updatedAt,
         });
         console.log("✅ User synced to main db successfully");
       } catch (mainDbError: any) {
@@ -283,13 +298,24 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("✅ User confirmed to exist in main db, proceeding with buyer creation...");
+
+    const body = await request.json();
+    const validatedData = createBuyerSchema.parse(body);
+
+    // Transform empty strings to undefined for optional fields
+    const buyerData = {
+      ...validatedData,
+      email: validatedData.email === "" ? null : validatedData.email,
+      notes: validatedData.notes === "" ? null : validatedData.notes,
+      ownerId: actualUserId, // Use the resolved actual user ID
+    };
     const [newBuyer] = await db.insert(buyers).values(buyerData).returning();
 
     // Create history entry
     await db.insert(buyerHistory).values({
       id: uuidv4(),
       buyerId: newBuyer.id,
-      changedBy: session.user.id,
+      changedBy: actualUserId, // Use the resolved actual user ID
       diff: {
         created: {
           old: null,
